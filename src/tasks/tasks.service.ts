@@ -1,80 +1,66 @@
-import { FilterTaskDto } from './dto/get-filtered-task.dto';
+import { User } from './../auth/user.entity';
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { ITask, TaskStatus } from './task.model';
-import { v4 as uuid } from 'uuid';
+import { InjectRepository } from '@nestjs/typeorm';
 import { CreateTaskDto } from './dto/create-task.dto';
+import { GetTasksFilterTaskDto } from './dto/get-filtered-task.dto';
+import { Task } from './task.entity';
+import { TaskStatus } from './task.enum';
+import { TaskRepository } from './task.repository';
 
 @Injectable()
 export class TasksService {
-  private tasks: ITask[] = [];
+  constructor(
+    @InjectRepository(TaskRepository)
+    private tasksRepository: TaskRepository,
+  ) {}
 
-  getAllTasks() {
-    return this.tasks;
+  getAllTasks(filterDto: GetTasksFilterTaskDto, user: User) {
+    return this.tasksRepository.getTasks(filterDto, user);
   }
 
-  getTaskByFilter(filterDto: FilterTaskDto): ITask[] {
-    const { status, search } = filterDto;
-
-    let tasks = this.getAllTasks();
-
-    if (status) {
-      tasks = tasks.filter((task) => task.status === status);
-    }
-
-    if (search) {
-      tasks = tasks.filter(
-        (task) =>
-          task.title.toLowerCase().includes(search.toLowerCase()) ||
-          task.description.toLowerCase().includes(search.toLowerCase()),
-      );
-    }
-
-    return tasks;
-  }
-
-  getTaskById(id: string) {
-    const task = this.tasks.find((task) => task.id === id);
-
+  async getTaskById(id: string, user: User): Promise<Task> {
+    const task = await this.tasksRepository.findOne({
+      where: {
+        id,
+        user,
+      },
+    });
     if (!task) {
-      throw new NotFoundException(`Task with ID ${id} Not Found`);
+      this.throwIdNotFound(id);
     }
-
     return task;
   }
 
-  createTask(createTaskDto: CreateTaskDto): ITask {
-    const { title, description } = createTaskDto;
-    if (!title || !description) {
-      return;
+  createTask(createTaskDto: CreateTaskDto, user: User): Promise<Task> {
+    return this.tasksRepository.createTask(createTaskDto, user);
+  }
+
+  async deleteTaskById(id: string, user: User): Promise<void> {
+    // The reason for using DELETE it is just one interaction wth DB but Remove requires more than one interaction
+    // const selectedTask = await this.getTaskById(id);
+    // await this.tasksRepository.remove(selectedTask);
+
+    const result = await this.tasksRepository.delete({ id, user });
+
+    if (result.affected === 0) {
+      this.throwIdNotFound(id);
     }
-    const task: ITask = {
-      id: uuid(),
-      title,
-      description,
-      status: TaskStatus.OPEN,
-    };
-
-    this.tasks.push(task);
-
-    return task;
   }
 
-  deleteTaskById(id: string) {
-    // const taskIndex = this.tasks.findIndex((task) => task.id === id);
-
-    // if (taskIndex > -1) {
-    //   this.tasks.splice(taskIndex, 1);
-    //   return true;
-    // }
-    // return false;
-
-    const selectedTask = this.getTaskById(id);
-    this.tasks = this.tasks.filter((task) => task.id !== selectedTask.id);
-  }
-
-  updateTaskById(id: string, status: TaskStatus) {
-    const task = this.getTaskById(id);
+  async updateTaskById(
+    id: string,
+    status: TaskStatus,
+    user: User,
+  ): Promise<Task> {
+    const task = await this.getTaskById(id, user);
     task.status = status;
+
+    await this.tasksRepository.save(task);
+
     return task;
+  }
+
+  private throwIdNotFound(id: string) {
+    throw new NotFoundException(`Task with ID ${id} Not Found`);
   }
 }
