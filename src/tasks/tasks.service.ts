@@ -6,13 +6,17 @@ import { GetTasksFilterTaskDto } from './dto/get-filtered-task.dto';
 import { Task } from './task.entity';
 import { TaskStatus } from './task.enum';
 import { TaskRepository } from './task.repository';
+import { ConfigService } from '@nestjs/config';
 
 @Injectable()
 export class TasksService {
   constructor(
     @InjectRepository(TaskRepository)
     private tasksRepository: TaskRepository,
-  ) {}
+    private configService: ConfigService,
+  ) {
+    console.log(configService.get('TEST_VALUE'));
+  }
 
   getAllTasks(filterDto: GetTasksFilterTaskDto, user: User) {
     return this.tasksRepository.getTasks(filterDto, user);
